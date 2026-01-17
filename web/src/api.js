@@ -1,8 +1,9 @@
+// src/services/api.js
 import axios from "axios";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
-  timeout: 15000, // prevents hanging requests
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json"
   }
@@ -31,18 +32,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (!error.response) {
-      // Network error / backend down
       console.error("Network error or server not reachable");
       return Promise.reject(error);
     }
 
     const { status, data } = error.response;
 
-    // Token expired → force logout
     if (status === 401 && data?.code === "TOKEN_EXPIRED") {
       localStorage.removeItem("token");
-
-      // Prevent redirect loop
       if (!window.location.pathname.includes("/login")) {
         window.location.href = "/login";
       }
