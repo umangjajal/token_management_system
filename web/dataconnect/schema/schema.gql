@@ -1,0 +1,46 @@
+type User @table {
+  displayName: String!
+  createdAt: Timestamp!
+  email: String
+  photoUrl: String
+  phoneNumber: String
+}
+
+type ServiceProvider @table {
+  name: String!
+  address: String!
+  createdAt: Timestamp!
+  description: String
+  phoneNumber: String
+  website: String
+  operatingHours: String
+}
+
+type Service @table {
+  serviceProvider: ServiceProvider!
+  name: String!
+  createdAt: Timestamp!
+  description: String
+  estimatedDuration: Int
+}
+
+type QueueToken @table {
+  user: User!
+  service: Service!
+  serviceProvider: ServiceProvider!
+  tokenNumber: Int!
+  status: String! # PENDING, CALLED, SERVED, MISSED, CANCELED
+  issuedAt: Timestamp!
+  expectedCallTime: Timestamp!
+  calledAt: Timestamp
+  servedAt: Timestamp
+}
+
+type Queue @table {
+  service: Service!
+  serviceProvider: ServiceProvider!
+  currentNumber: Int!
+  lastIssuedNumber: Int!
+  createdAt: Timestamp!
+  estimatedWaitTime: Int
+}

@@ -1,0 +1,6 @@
+connectorId: "token-connector"
+authMode: "PUBLIC" # Start with PUBLIC for development
+generate:
+  javascriptSdk:
+    outputDir: "../../src/generated" # Adjust to match your frontend folder structure
+    package: "@token-app/api"

@@ -1,0 +1,11 @@
+specVersion: "v1"
+serviceId: "web"
+location: "us-east4"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "fdcdb"
+      cloudSql:
+        instanceId: "web-fdc"
+connectorDirs: ["./connector"]

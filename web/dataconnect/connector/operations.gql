@@ -1,0 +1,79 @@
+# 1. USER OPERATIONS
+# Create or update the current user profile
+mutation UpsertUser($username: String!, $email: String, $phoneNumber: String) @auth(level: PUBLIC) {
+  user_upsert(data: {
+    displayName: $username,
+    email: $email,
+    phoneNumber: $phoneNumber,
+    createdAt: { today: true }
+  })
+}
+
+# Get current user details
+query GetCurrentUser($email: String) @auth(level: PUBLIC) {
+  users(where: { email: { eq: $email } }) {
+    id
+    displayName
+    createdAt
+  }
+}
+
+# 2. DISCOVERY OPERATIONS
+# List all service providers (Shops, Clinics, etc.)
+query ListServiceProviders @auth(level: PUBLIC) {
+  serviceProviders {
+    id
+    name
+    address
+    description
+    operatingHours
+  }
+}
+
+# Get services offered by a specific provider
+query GetProviderServices($providerId: UUID!) @auth(level: PUBLIC) {
+  services(where: { serviceProvider: { id: { eq: $providerId } } }) {
+    id
+    name
+    estimatedDuration
+    description
+  }
+}
+
+# 3. TOKEN / QUEUE OPERATIONS
+# Issue a new token (Join a queue)
+mutation IssueToken($userId: UUID!, $serviceId: UUID!, $providerId: UUID!, $tokenNumber: Int!) @auth(level: PUBLIC) {
+  queueToken_insert(data: {
+    userId: $userId,
+    serviceId: $serviceId,
+    serviceProviderId: $providerId,
+    tokenNumber: $tokenNumber,
+    status: "PENDING",
+    issuedAt: { today: true },
+    expectedCallTime: { today: true } # Logic for this usually requires backend calculation
+  })
+}
+
+# View my active tokens
+query GetMyTokens($userId: UUID!) @auth(level: PUBLIC) {
+  queueTokens(where: { user: { id: { eq: $userId } } }) {
+    id
+    tokenNumber
+    status
+    expectedCallTime
+    service {
+      name
+    }
+    serviceProvider {
+      name
+    }
+  }
+}
+
+# 4. ADMIN / STAFF OPERATIONS
+# Update token status (e.g., Call a user or mark served)
+mutation UpdateTokenStatus($tokenId: UUID!, $status: String!) @auth(level: PUBLIC) {
+  queueToken_update(id: $tokenId, data: {
+    status: $status
+  })
+}
