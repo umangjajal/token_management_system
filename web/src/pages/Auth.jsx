@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../firebase/firebase";
-import api from "../api";
+import api from "../services/api";
 
 export default function Auth({ mode, onLogin, onRegister }) {
   const [params] = useSearchParams();
@@ -55,6 +55,8 @@ export default function Auth({ mode, onLogin, onRegister }) {
      GOOGLE LOGIN
   ===================== */
   const handleGoogleLogin = async () => {
+    setError("");
+
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
@@ -69,7 +71,7 @@ export default function Auth({ mode, onLogin, onRegister }) {
       navigate("/");
     } catch (err) {
       console.error("Google login failed", err);
-      setError("Google login failed");
+      setError("Google login failed. Please try again.");
     }
   };
 
@@ -88,7 +90,7 @@ export default function Auth({ mode, onLogin, onRegister }) {
           </p>
         </div>
 
-        {/* ROLE SELECT (REGISTER ONLY) */}
+        {/* ROLE SELECT */}
         {mode === "register" && (
           <div className="grid grid-cols-3 gap-2 text-xs">
             {["customer", "shopkeeper", "admin"].map((role) => (
@@ -96,10 +98,11 @@ export default function Auth({ mode, onLogin, onRegister }) {
                 key={role}
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, role }))}
-                className={`py-2 rounded-xl border transition ${form.role === role
-                  ? "border-primary-500 bg-primary-600/30 text-primary-100"
-                  : "border-white/5 bg-white/5 text-slate-300"
-                  }`}
+                className={`py-2 rounded-xl border transition ${
+                  form.role === role
+                    ? "border-primary-500 bg-primary-600/30 text-primary-100"
+                    : "border-white/5 bg-white/5 text-slate-300"
+                }`}
               >
                 {role}
               </button>
@@ -159,9 +162,7 @@ export default function Auth({ mode, onLogin, onRegister }) {
             />
           </div>
 
-          {error && (
-            <p className="text-xs text-red-400">{error}</p>
-          )}
+          {error && <p className="text-xs text-red-400">{error}</p>}
 
           <button
             type="submit"
@@ -171,8 +172,8 @@ export default function Auth({ mode, onLogin, onRegister }) {
             {loading
               ? "Please wait..."
               : mode === "login"
-                ? "Login"
-                : "Create account"}
+              ? "Login"
+              : "Create account"}
           </button>
         </form>
 
@@ -183,7 +184,7 @@ export default function Auth({ mode, onLogin, onRegister }) {
           <div className="flex-1 h-px bg-white/10" />
         </div>
 
-        {/* GOOGLE BUTTON */}
+        {/* GOOGLE */}
         <button
           onClick={handleGoogleLogin}
           className="w-full rounded-xl border border-white/10 py-2 text-sm
