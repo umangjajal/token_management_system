@@ -18,7 +18,7 @@ const tokenRoutes = require("./routes/token");
 const locationRoutes = require("./routes/location");
 const productRoutes = require("./routes/product");
 const masterProductRoutes = require("./routes/masterProduct");
-const adminProductRoutes = require("./routes/adminProducts");
+const adminProductRoutes = require("./routes/adminproducts");
 const adminAnalyticsRoutes = require("./routes/adminAnalytics");
 const cartRoutes = require("./routes/cart");
 
