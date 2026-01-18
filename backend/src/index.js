@@ -5,7 +5,7 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const path = require("path");
-const { Server } = require("socket.io");
+//const { Server } = require("socket.io");
 
 // Models
 const User = require("./models/User");
@@ -34,12 +34,13 @@ const server = http.createServer(app);
 // ======================
 // SOCKET.IO
 // ======================
-const io = new Server(server, {
+/*const io = new Server(server, {
   cors: {
     origin: process.env.CLIENT_ORIGIN || "*",
     methods: ["GET", "POST", "PUT", "DELETE"]
   }
-});
+});*/
+
 const allowedOrigins = [
   "http://localhost:5173",
   "https://token-management-system-eta.vercel.app",
@@ -48,7 +49,7 @@ const allowedOrigins = [
 // ======================
 // GLOBAL MIDDLEWARE
 // ======================
-aapp.use(
+app.use(
   cors({
     origin: function (origin, callback) {
       // allow REST tools & server-to-server
