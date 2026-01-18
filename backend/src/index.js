@@ -97,14 +97,14 @@ app.use("/uploads", express.static("uploads"));
 // ======================
 // SOCKET CONNECTION
 // ======================
-io.on("connection", (socket) => {
+/*io.on("connection", (socket) => {
   console.log("🔌 Client connected:", socket.id);
   registerSocketHandlers(io, socket);
 
   socket.on("disconnect", () => {
     console.log("❌ Client disconnected:", socket.id);
   });
-});
+});*/
 
 // ======================
 // DEFAULT ADMIN CREATION
