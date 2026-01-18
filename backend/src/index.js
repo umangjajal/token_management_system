@@ -40,11 +40,31 @@ const io = new Server(server, {
     methods: ["GET", "POST", "PUT", "DELETE"]
   }
 });
-
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://token-management-system-eta.vercel.app",
+  "https://token-management-system-ev2s0ieou-umang-jajals-projects.vercel.app"
+];
 // ======================
 // GLOBAL MIDDLEWARE
 // ======================
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || "*", credentials: true }));
+aapp.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow REST tools & server-to-server
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS not allowed"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  })
+);
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
