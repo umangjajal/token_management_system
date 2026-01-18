@@ -84,27 +84,59 @@ router.post("/verify-otp", async (req, res) => {
 });
 
 router.post("/google", async (req, res) => {
-  const { email, name, googleId } = req.body;
+  try {
+    const { email, name, googleId } = req.body;
 
-  let user = await User.findOne({ email });
+    if (!email || !googleId) {
+      return res.status(400).json({ message: "Invalid Google data" });
+    }
 
-  if (!user) {
-    user = await User.create({
-      name,
-      email,
-      googleId,
-      emailVerified: true
-    });
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        role: "customer",
+        isEmailVerified: true
+      });
+    }
+    else if (!user) {
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        role: "Shopkeeper",
+        isEmailVerified: true
+      });
+    }
+    else if (!user) {
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        role: "Admin",
+        isEmailVerified: true
+      });
+    }
+
+    const token = user.generateJWT();
+
+    res.json({ token, user });
+  } catch (err) {
+    console.error("Google auth error:", err);
+    res.status(500).json({ message: "Google authentication failed" });
   }
-
-  const token = jwt.sign(
-    { id: user._id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-
-  res.json({ token, user });
 });
+
+const token = jwt.sign(
+  { id: user._id, role: user.role },
+  process.env.JWT_SECRET,
+  { expiresIn: "7d" }
+);
+
+res.json({ token, user });
 
 router.post("/login", async (req, res) => {
   try {
