@@ -72,9 +72,10 @@ export function useAuth() {
       // Update global API header
       api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
       setUser(userData);
+      
+      // Return res.data so caller can check profile completeness (e.g., phone)
       return res.data;
     } catch (err) {
-      // Catching the CORS/Network error specifically
       if (err.code === "ERR_NETWORK") {
         throw new Error("Cannot connect to backend. Check CORS configuration on Railway.");
       }
@@ -93,6 +94,7 @@ export function useAuth() {
 
   return {
     user,
+    setUser, // Added to allow updating user state after profile edits
     loading,
     login,
     register,

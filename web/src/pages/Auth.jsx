@@ -66,25 +66,36 @@ export default function Auth({ mode }) {
     try {
       // 1. Firebase Client-side Popup
       const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
+      const googleUser = result.user;
 
-      // 2. Send Google Data + Selected Role to Backend
-      // This is crucial: passing form.role ensures they get the role they picked in the UI
-      await googleLogin({
-        email: user.email,
-        name: user.displayName,
-        googleId: user.uid,
-        role: form.role 
+      // 2. Send Google Data + Current Selected Role to Backend
+      const res = await googleLogin({
+        email: googleUser.email,
+        name: googleUser.displayName,
+        googleId: googleUser.uid,
+        role: form.role // Sends the role selected in the UI
       });
 
-      // 3. Success Redirect
-      navigate("/");
+      // 3. Conditional Onboarding Logic
+      // res.user contains the user record from the backend
+      if (!res.user.phone) {
+        // Redirect to profile to add missing info
+        navigate("/profile?onboarding=true"); 
+      } else {
+        // Navigate based on role if profile is already complete
+        if (res.user.role === "shopkeeper") {
+          navigate("/onboard/shop");
+        } else if (res.user.role === "admin") {
+          navigate("/dashboard/admin");
+        } else {
+          navigate("/");
+        }
+      }
     } catch (err) {
       console.error("Google login error:", err);
       
-      // Checking specifically for CORS or backend connection issues
-      if (err.message.includes("Network Error") || !err.response) {
-        setError("Cannot connect to server. Ensure backend CORS is configured for localhost:5173.");
+      if (err.message && err.message.includes("Network Error") || !err.response) {
+        setError("Cannot connect to server. Check your internet or backend CORS configuration.");
       } else {
         setError(err.response?.data?.message || "Google login failed. Please try again.");
       }
@@ -105,9 +116,9 @@ export default function Auth({ mode }) {
           </p>
         </div>
 
-        {/* ROLE SELECTOR - Important for Google Auth to know which role to assign */}
+        {/* ROLE SELECTOR */}
         <div className="flex p-1 bg-white/5 rounded-xl border border-white/5">
-          {["customer", "shopkeeper"].map((r) => (
+          {["customer", "shopkeeper", "admin"].map((r) => (
             <button
               key={r}
               type="button"
@@ -213,6 +224,7 @@ export default function Auth({ mode }) {
         <p className="text-center text-xs text-slate-500">
           {mode === "login" ? "Don't have an account? " : "Already have an account? "}
           <button 
+            type="button"
             onClick={() => navigate(mode === "login" ? "/register" : "/login")}
             className="text-blue-400 hover:underline"
           >

@@ -15,7 +15,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// REQUIRED
+// Forces the account selector to pop up every time
 googleProvider.setCustomParameters({
   prompt: "select_account"
 });

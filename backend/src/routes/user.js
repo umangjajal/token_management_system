@@ -1,22 +1,38 @@
-const express = require("express");
-const User = require("../models/User");
+router.post("/google", async (req, res) => {
+  try {
+    const { email, name, googleId } = req.body;
 
-const router = express.Router();
+    if (!email || !googleId) {
+      return res.status(400).json({ message: "Invalid Google data" });
+    }
 
-router.get("/profile", async (req, res) => {
-  const user = await User.findById(req.user.id).select("-passwordHash");
-  res.json(user);
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        role: "customer",
+        profileCompleted: false
+      });
+    }
+
+    const token = buildToken(user);
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || "",
+        role: user.role,
+        profileCompleted: user.profileCompleted
+      }
+    });
+  } catch (err) {
+    console.error("Google auth error:", err);
+    res.status(500).json({ message: "Google authentication failed" });
+  }
 });
-
-router.put("/profile", async (req, res) => {
-  const updates = req.body;
-  delete updates.passwordHash;
-  const user = await User.findByIdAndUpdate(
-    req.user.id,
-    updates,
-    { new: true }
-  ).select("-passwordHash");
-  res.json(user);
-});
-
-module.exports = router;
