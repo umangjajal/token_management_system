@@ -1,13 +1,15 @@
-// web/src/pages/Auth.jsx
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "../firebase/firebase";
-import api from "../services/api";
+import { useAuth } from "../hooks/useAuth";
 
-export default function Auth({ mode, onLogin, onRegister }) {
+export default function Auth({ mode }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const { login, register, googleLogin } = useAuth();
+
+  // Role can come from URL (e.g., ?role=shopkeeper) or default to customer
   const defaultRole = params.get("role") || "customer";
 
   const [form, setForm] = useState({
@@ -22,10 +24,14 @@ export default function Auth({ mode, onLogin, onRegister }) {
   const [error, setError] = useState("");
 
   /* =====================
-     HANDLERS
+      HANDLERS
   ===================== */
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleRoleChange = (selectedRole) => {
+    setForm((prev) => ({ ...prev, role: selectedRole }));
   };
 
   const handleSubmit = async (e) => {
@@ -35,163 +41,184 @@ export default function Auth({ mode, onLogin, onRegister }) {
 
     try {
       if (mode === "login") {
-        await onLogin(form.email, form.password);
+        await login(form.email, form.password);
         navigate("/");
       } else {
-        await onRegister(form);
-
-        if (form.role === "shopkeeper") navigate("/onboard/shop");
-        else if (form.role === "admin") navigate("/dashboard/admin");
-        else navigate("/");
+        await register(form);
+        // Redirecting to login for email verification flow
+        navigate("/login?verified=false"); 
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Authentication failed");
+      console.error("Auth error:", err);
+      setError(err.response?.data?.message || "Authentication failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   /* =====================
-     GOOGLE LOGIN
+      GOOGLE LOGIN
   ===================== */
   const handleGoogleLogin = async () => {
     setError("");
+    setLoading(true);
 
     try {
+      // 1. Firebase Client-side Popup
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
 
-      const res = await api.post("/auth/google", {
+      // 2. Send Google Data + Selected Role to Backend
+      // This is crucial: passing form.role ensures they get the role they picked in the UI
+      await googleLogin({
         email: user.email,
         name: user.displayName,
-        googleId: user.uid
+        googleId: user.uid,
+        role: form.role 
       });
 
-      localStorage.setItem("tms_token", res.data.token);
+      // 3. Success Redirect
       navigate("/");
     } catch (err) {
-      console.error("Google login failed", err);
-      setError("Google login failed. Please try again.");
+      console.error("Google login error:", err);
+      
+      // Checking specifically for CORS or backend connection issues
+      if (err.message.includes("Network Error") || !err.response) {
+        setError("Cannot connect to server. Ensure backend CORS is configured for localhost:5173.");
+      } else {
+        setError(err.response?.data?.message || "Google login failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-4">
-      <div className="glass-card w-full max-w-md p-6 space-y-6">
-        {/* HEADER */}
-        <div>
-          <h1 className="text-lg font-semibold text-slate-100">
-            {mode === "login" ? "Welcome back" : "Create your account"}
+    <main className="min-h-screen flex items-center justify-center px-4 bg-slate-950">
+      <div className="glass-card w-full max-w-md p-8 space-y-6 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-slate-100">
+            {mode === "login" ? "Welcome Back" : "Create Account"}
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            {mode === "login"
-              ? "Login to continue"
-              : "Sign up to get started"}
+          <p className="text-sm text-slate-400 mt-2">
+            {mode === "login" ? "Enter your credentials to continue" : "Join the Token Management System"}
           </p>
         </div>
 
-        {/* ROLE SELECT */}
-        {mode === "register" && (
-          <div className="grid grid-cols-3 gap-2 text-xs">
-            {["customer", "shopkeeper", "admin"].map((role) => (
-              <button
-                key={role}
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, role }))}
-                className={`py-2 rounded-xl border transition ${
-                  form.role === role
-                    ? "border-primary-500 bg-primary-600/30 text-primary-100"
-                    : "border-white/5 bg-white/5 text-slate-300"
-                }`}
-              >
-                {role}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* ROLE SELECTOR - Important for Google Auth to know which role to assign */}
+        <div className="flex p-1 bg-white/5 rounded-xl border border-white/5">
+          {["customer", "shopkeeper"].map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => handleRoleChange(r)}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                form.role === r 
+                ? "bg-blue-600 text-white shadow-lg" 
+                : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {r.charAt(0).toUpperCase() + r.slice(1)}
+            </button>
+          ))}
+        </div>
 
-        {/* FORM */}
-        <form onSubmit={handleSubmit} className="space-y-4 text-sm">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {mode === "register" && (
             <div className="space-y-1">
-              <label className="text-xs text-slate-300">Name</label>
               <input
                 name="name"
+                type="text"
+                placeholder="Full Name"
                 value={form.name}
                 onChange={handleChange}
+                className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
                 required
-                className="input"
               />
             </div>
           )}
 
           <div className="space-y-1">
-            <label className="text-xs text-slate-300">Email</label>
             <input
               name="email"
               type="email"
+              placeholder="Email Address"
               value={form.email}
               onChange={handleChange}
+              className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
               required
-              className="input"
             />
           </div>
 
           {mode === "register" && (
             <div className="space-y-1">
-              <label className="text-xs text-slate-300">Phone</label>
               <input
                 name="phone"
+                type="tel"
+                placeholder="Phone Number (+91...)"
                 value={form.phone}
                 onChange={handleChange}
-                placeholder="+91XXXXXXXXXX"
-                className="input"
+                className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
               />
             </div>
           )}
 
           <div className="space-y-1">
-            <label className="text-xs text-slate-300">Password</label>
             <input
               name="password"
               type="password"
+              placeholder="Password"
               value={form.password}
               onChange={handleChange}
+              className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
               required
-              className="input"
             />
           </div>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-red-400 text-xs text-center">{error}</p>
+            </div>
+          )}
 
-          <button
+          <button 
             type="submit"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98] disabled:opacity-50" 
             disabled={loading}
-            className="btn-primary w-full justify-center"
           >
-            {loading
-              ? "Please wait..."
-              : mode === "login"
-              ? "Login"
-              : "Create account"}
+            {loading ? "Please wait..." : mode === "login" ? "Login" : "Register"}
           </button>
         </form>
 
-        {/* DIVIDER */}
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <div className="flex-1 h-px bg-white/10" />
-          OR
-          <div className="flex-1 h-px bg-white/10" />
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-white/10"></div>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-slate-900 px-2 text-slate-500">Or continue with</span>
+          </div>
         </div>
 
-        {/* GOOGLE */}
         <button
           onClick={handleGoogleLogin}
-          className="w-full rounded-xl border border-white/10 py-2 text-sm
-                     text-slate-200 hover:bg-white/5 transition"
+          className="w-full flex items-center justify-center gap-3 border border-white/10 py-3 rounded-xl text-slate-200 hover:bg-white/5 transition-all active:scale-[0.98] disabled:opacity-50"
+          disabled={loading}
         >
-          Continue with Google
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C9.03,19.27 6.48,16.68 6.48,13.5C6.48,10.31 9.03,7.74 12.19,7.74C13.9,7.74 15.6,8.36 16.67,9.35L18.73,7.35C17.21,5.97 14.8,5.01 12.19,5.01C7.5,5.01 3.75,8.81 3.75,13.5C3.75,18.19 7.5,21.99 12.19,21.99C16.88,21.99 21.62,18.75 21.62,13.5C21.62,12.63 21.48,11.85 21.35,11.1Z" />
+          </svg>
+          Google
         </button>
+
+        <p className="text-center text-xs text-slate-500">
+          {mode === "login" ? "Don't have an account? " : "Already have an account? "}
+          <button 
+            onClick={() => navigate(mode === "login" ? "/register" : "/login")}
+            className="text-blue-400 hover:underline"
+          >
+            {mode === "login" ? "Sign Up" : "Log In"}
+          </button>
+        </p>
       </div>
     </main>
   );

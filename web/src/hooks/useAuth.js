@@ -6,57 +6,97 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   /* =========================
-     LOAD USER FROM TOKEN
+      LOAD USER FROM TOKEN
   ========================= */
   useEffect(() => {
-    const token = localStorage.getItem("tms_token");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    const initAuth = async () => {
+      const token = localStorage.getItem("tms_token");
 
-    api
-      .get("/user/profile")
-      .then((res) => {
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Ensure the API instance has the token for the initial check
+        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        const res = await api.get("/user/profile");
         setUser(res.data);
-      })
-      .catch(() => {
+      } catch (err) {
+        console.error("Session restoration failed:", err);
         localStorage.removeItem("tms_token");
+        delete api.defaults.headers.common["Authorization"];
         setUser(null);
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
   /* =========================
-     LOGIN
+      LOGIN (EMAIL + PASSWORD)
   ========================= */
   const login = async (email, password) => {
-    const res = await api.post("/auth/login", {
-      email,
-      password
-    });
-
-    localStorage.setItem("tms_token", res.data.token);
-    setUser(res.data.user);
+    const res = await api.post("/auth/login", { email, password });
+    
+    const { token, user: userData } = res.data;
+    localStorage.setItem("tms_token", token);
+    
+    // Set global header for subsequent requests
+    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    setUser(userData);
+    return res.data;
   };
 
   /* =========================
-     REGISTER
+      REGISTER
   ========================= */
   const register = async (payload) => {
+    // Backend returns a message; user must verify email before logging in
     const res = await api.post("/auth/register", payload);
-
-    localStorage.setItem("tms_token", res.data.token);
-    setUser(res.data.user);
+    return res.data;
   };
 
   /* =========================
-     LOGOUT
+      GOOGLE LOGIN
+  ========================= */
+  const googleLogin = async (googlePayload) => {
+    try {
+      const res = await api.post("/auth/google", googlePayload);
+      
+      const { token, user: userData } = res.data;
+      localStorage.setItem("tms_token", token);
+      
+      // Update global API header
+      api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+      setUser(userData);
+      return res.data;
+    } catch (err) {
+      // Catching the CORS/Network error specifically
+      if (err.code === "ERR_NETWORK") {
+        throw new Error("Cannot connect to backend. Check CORS configuration on Railway.");
+      }
+      throw err;
+    }
+  };
+
+  /* =========================
+      LOGOUT
   ========================= */
   const logout = () => {
     localStorage.removeItem("tms_token");
+    delete api.defaults.headers.common["Authorization"];
     setUser(null);
   };
 
-  return { user, loading, login, register, logout };
+  return {
+    user,
+    loading,
+    login,
+    register,
+    googleLogin,
+    logout
+  };
 }

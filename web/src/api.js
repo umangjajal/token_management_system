@@ -1,8 +1,9 @@
-// src/services/api.js
 import axios from "axios";
 
 const api = axios.create({
+  // Prioritizes the production URL from your environment variables
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  withCredentials: true,
   timeout: 15000,
   headers: {
     "Content-Type": "application/json"
@@ -14,7 +15,8 @@ const api = axios.create({
 ============================ */
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    // Synchronized with localStorage key used in Auth.jsx and useAuth.js
+    const token = localStorage.getItem("tms_token");
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -31,17 +33,27 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Handle cases where the server is down or CORS blocks the request
     if (!error.response) {
-      console.error("Network error or server not reachable");
-      return Promise.reject(error);
+      console.error("Connection Error: The server is unreachable or CORS is blocking the request.");
+      return Promise.reject({
+        ...error,
+        message: "Unable to connect to the server. Please check your internet or CORS settings."
+      });
     }
 
     const { status, data } = error.response;
 
-    if (status === 401 && data?.code === "TOKEN_EXPIRED") {
-      localStorage.removeItem("token");
-      if (!window.location.pathname.includes("/login")) {
-        window.location.href = "/login";
+    // Handle unauthorized access or expired tokens
+    if (status === 401) {
+      localStorage.removeItem("tms_token");
+      
+      // Only redirect to login if the user isn't already trying to authenticate
+      const isAuthPage = window.location.pathname.includes("/login") || 
+                         window.location.pathname.includes("/register");
+                         
+      if (!isAuthPage) {
+        window.location.href = "/login?session=expired";
       }
     }
 
