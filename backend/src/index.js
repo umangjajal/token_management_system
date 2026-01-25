@@ -5,10 +5,14 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const path = require("path");
 
-// Load environment variables
+/* =========================
+   ENV
+========================= */
 dotenv.config();
 
-// Routes
+/* =========================
+   ROUTES
+========================= */
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
 const shopRoutes = require("./routes/shop");
@@ -20,98 +24,118 @@ const adminProductRoutes = require("./routes/adminproducts");
 const adminAnalyticsRoutes = require("./routes/adminAnalytics");
 const cartRoutes = require("./routes/cart");
 
-// Middleware
+/* =========================
+   MIDDLEWARE
+========================= */
 const { authMiddleware } = require("./middleware/auth");
 
+/* =========================
+   APP INIT
+========================= */
 const app = express();
 const server = http.createServer(app);
 
 /* =========================
-    ALLOWED ORIGINS
+   ALLOWED ORIGINS
 ========================= */
 const allowedOrigins = [
   "http://localhost:5173",
+  "http://localhost:3000",
   "https://token-management-system-eta.vercel.app",
-  "https://token-management-system-chi.vercel.app" // Added this from your previous error log
+  "https://token-management-system-chi.vercel.app"
 ];
 
 /* =========================
-    GLOBAL CORS (REFINED)
+   CORS CONFIG
 ========================= */
 const corsOptions = {
   origin: (origin, callback) => {
-    // 1. Allow mobile apps, Postman, or curl (no origin)
     if (!origin) return callback(null, true);
 
-    // 2. Exact match check
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    // 3. Pattern match for Vercel preview deployments (Optional but recommended)
     if (origin.endsWith(".vercel.app")) {
       return callback(null, true);
     }
 
-    return callback(new Error("CORS policy block: Origin not allowed"), false);
+    console.error("❌ Blocked by CORS:", origin);
+    callback(new Error("CORS not allowed"));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+  allowedHeaders: ["Content-Type", "Authorization"],
+  optionsSuccessStatus: 200
 };
 
-// Apply CORS to all requests
+/* =========================
+   APPLY MIDDLEWARE
+========================= */
 app.use(cors(corsOptions));
-
-// Handle preflight requests for all routes
 app.options("*", cors(corsOptions));
 
-/* =========================
-    MIDDLEWARE
-========================= */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // Added for form-data support
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
+
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 /* =========================
-    HEALTH CHECK
+   HEALTH CHECK
 ========================= */
 app.get("/", (req, res) => {
-  res.json({ 
-    ok: true, 
-    message: "Token Management API running",
+  res.json({
+    ok: true,
+    service: "Token Management API",
+    uptime: process.uptime(),
     timestamp: new Date().toISOString()
   });
 });
 
 /* =========================
-    ROUTES
+   ROUTES
 ========================= */
-// Auth is public
+// PUBLIC
 app.use("/api/auth", authRoutes);
 
-// Protected routes (Ensure authMiddleware is solid)
+// PROTECTED
 app.use("/api/user", authMiddleware, userRoutes);
 app.use("/api/location", authMiddleware, locationRoutes);
 app.use("/api/cart", authMiddleware, cartRoutes);
 
-// Mixed/Public routes (Depending on internal route logic)
+// PUBLIC / MIXED
 app.use("/api/shops", shopRoutes);
 app.use("/api/tokens", tokenRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/master-products", masterProductRoutes);
+
+// ADMIN
 app.use("/api/admin/products", adminProductRoutes);
 app.use("/api/admin/analytics", adminAnalyticsRoutes);
 
 /* =========================
-    DATABASE + SERVER
+   404 HANDLER
+========================= */
+app.use((req, res) => {
+  res.status(404).json({ message: "API route not found" });
+});
+
+/* =========================
+   ERROR HANDLER
+========================= */
+app.use((err, req, res, next) => {
+  console.error("❌ Server error:", err.message);
+  res.status(500).json({ message: "Internal server error" });
+});
+
+/* =========================
+   DATABASE + SERVER
 ========================= */
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
-  console.error("❌ MONGO_URI is missing in environment variables!");
+  console.error("❌ MONGO_URI missing");
   process.exit(1);
 }
 
@@ -124,7 +148,6 @@ mongoose
     );
   })
   .catch((err) => {
-    console.error("❌ MongoDB connection error:", err.message);
+    console.error("❌ MongoDB connection failed:", err.message);
     process.exit(1);
   });
-  

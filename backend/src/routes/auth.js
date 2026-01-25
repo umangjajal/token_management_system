@@ -2,6 +2,7 @@ const express = require("express");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const User = require("../models/User");
+import User from "../models/User.js";
 const sendEmail = require("../utils/sendEmail");
 
 const router = express.Router();
@@ -112,7 +113,7 @@ router.post("/google", async (req, res) => {
         email,
         googleId,
         role: "customer",
-        isEmailVerified: true
+        profileCompleted: false
       });
     }
 
@@ -124,7 +125,9 @@ router.post("/google", async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
+        phone: user.phone || "",
+        role: user.role,
+        profileCompleted: user.profileCompleted
       }
     });
   } catch (err) {
