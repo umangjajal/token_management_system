@@ -17,7 +17,49 @@ const UserSchema = new mongoose.Schema(
     emailVerified: { type: Boolean, default: false },
     phoneVerified: { type: Boolean, default: false },
 
-    googleId: String
+    // Role-based additional fields
+    profileCompleted: { type: Boolean, default: false },
+    profileData: {
+      avatar: String,
+      bio: String,
+      addressLine1: String,
+      addressLine2: String,
+      city: String,
+      state: String,
+      zipCode: String
+    },
+
+    // Customer-specific
+    preferences: {
+      notificationsEnabled: { type: Boolean, default: true },
+      preferredShops: [mongoose.Schema.Types.ObjectId]
+    },
+
+    // Shopkeeper-specific
+    shopId: mongoose.Schema.Types.ObjectId,
+    businessDetails: {
+      businessName: String,
+      businessType: String,
+      gstNumber: String,
+      businessRegistrationNumber: String,
+      openingHours: String,
+      closingHours: String,
+      counters: { type: Number, default: 1 }
+    },
+
+    // Admin-specific
+    permissions: [String], // e.g., ["manage_users", "manage_shops", "view_analytics"]
+    adminLevel: {
+      type: String,
+      enum: ["super_admin", "admin", "moderator"],
+      default: "admin"
+    },
+
+    googleId: String,
+    lastLogin: Date,
+    isActive: { type: Boolean, default: true },
+    loginAttempts: { type: Number, default: 0 },
+    lockUntil: Date
   },
   { timestamps: true }
 );

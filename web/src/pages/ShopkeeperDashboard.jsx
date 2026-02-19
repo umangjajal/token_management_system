@@ -2,18 +2,18 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
 
-
-
-
 export default function ShopkeeperDashboard() {
   const [shops, setShops] = useState([]);
   const [selectedShop, setSelectedShop] = useState(null);
+  const [activeTab, setActiveTab] = useState("products");
   const [queue, setQueue] = useState([]);
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterAvailable, setFilterAvailable] = useState("all");
   const [form, setForm] = useState({
     name: "",
     price: "",
@@ -24,7 +24,7 @@ export default function ShopkeeperDashboard() {
     isAvailable: true
   });
 
-  const resetForm = () =>
+  const resetForm = () => {
     setForm({
       name: "",
       price: "",
@@ -34,15 +34,18 @@ export default function ShopkeeperDashboard() {
       stock: "",
       isAvailable: true
     });
+    setImage(null);
+    setImagePreview(null);
+    setEditingProduct(null);
+  };
 
-  // Load approved shops (for now, from /shops and filter client side)
+  // Load approved shops
   useEffect(() => {
     api
       .get("/shops/mine")
       .then((res) => setShops(res.data))
       .catch((e) => console.error(e));
   }, []);
-
 
   // Load queue + products when shop changes
   useEffect(() => {
@@ -64,10 +67,14 @@ export default function ShopkeeperDashboard() {
   };
 
   const handleStatus = async (tokenId, status) => {
-    await api.put(`/tokens/${tokenId}/status`, { status });
-    if (selectedShop) {
-      const res = await api.get(`/tokens/${selectedShop}`);
-      setQueue(res.data);
+    try {
+      await api.put(`/tokens/${tokenId}/status`, { status });
+      if (selectedShop) {
+        const res = await api.get(`/tokens/${selectedShop}`);
+        setQueue(res.data);
+      }
+    } catch (err) {
+      console.error("Status update error", err);
     }
   };
 
@@ -77,8 +84,6 @@ export default function ShopkeeperDashboard() {
 
     try {
       const fd = new FormData();
-
-
       fd.append("name", form.name);
       fd.append("price", form.price ? Number(form.price) : 0);
       fd.append("unit", form.unit);
@@ -97,12 +102,7 @@ export default function ShopkeeperDashboard() {
         await api.post(`/products/${selectedShop}`, fd);
       }
 
-
       resetForm();
-      setEditingProduct(null);
-      setImage(null);
-      setImagePreview(null);
-
       await loadProducts(selectedShop);
     } catch (err) {
       console.error("Save product error", err);
@@ -132,331 +132,484 @@ export default function ShopkeeperDashboard() {
     }
   };
 
-  return (
-    <main className="mx-auto max-w-6xl px-4 py-8 space-y-5">
-      <h1 className="text-xl font-semibold text-slate-100">
-        Shopkeeper dashboard
-      </h1>
+  // Filter products
+  const filteredProducts = products.filter(p => {
+    const matchSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchFilter = filterAvailable === "all" || 
+      (filterAvailable === "available" ? p.isAvailable : !p.isAvailable);
+    return matchSearch && matchFilter;
+  });
 
-      {/* Shop selector */}
-      <section className="glass-card p-4 space-y-3 text-sm">
-        <h2 className="text-slate-200 text-sm font-medium">
-          Your approved shops
-        </h2>
-        <div className="flex gap-3 flex-wrap">
-          {shops.map((shop) => (
-            <button
-              key={shop._id}
-              onClick={() => setSelectedShop(shop._id)}
-              className={`px-3 py-2 rounded-xl border text-xs ${selectedShop === shop._id
-                ? "border-primary-500 bg-primary-600/30 text-primary-100"
-                : "border-white/5 bg-white/5 text-slate-200"
-                }`}
-            >
-              {shop.name}
-            </button>
-          ))}
-          {shops.length === 0 && (
-            <p className="text-xs text-slate-400">
-              No approved shops yet. Wait for admin approval.
-            </p>
+  // Stats Cards
+  const StatsCard = ({ icon, label, value, color }) => (
+    <div className={`rounded-xl border ${color} bg-white/5 p-4 backdrop-blur-sm`}>
+      <div className="flex items-center gap-3">
+        <div className={`text-2xl ${color.split("border-")[1]?.split(" ")[0] === "blue" ? "text-blue-400" : color.split("border-")[1]?.split(" ")[0] === "emerald" ? "text-emerald-400" : color.split("border-")[1]?.split(" ")[0] === "amber" ? "text-amber-400" : "text-purple-400"}`}>
+          {icon}
+        </div>
+        <div>
+          <p className="text-sm text-slate-400">{label}</p>
+          <p className="text-2xl font-bold text-slate-100">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTab = () => {
+    if (activeTab === "queue") {
+      return (
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <span className="text-2xl">📋</span> Live Queue Management
+          </h2>
+          {queue.length === 0 ? (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-8 text-center backdrop-blur-sm">
+              <p className="text-amber-300">No tokens in queue yet</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {queue.map((t) => (
+                <div
+                  key={t._id}
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-sm hover:border-blue-500/50 transition-all"
+                >
+                  <div className="flex-1">
+                    <p className="text-lg font-bold text-blue-300">
+                      Token #{t.tokenNumber}
+                    </p>
+                    <div className="flex gap-2 mt-2">
+                      <span className={`text-xs px-3 py-1 rounded-full border ${
+                        t.status === "pending" ? "border-amber-500/40 bg-amber-500/10 text-amber-300" :
+                        t.status === "called" ? "border-blue-500/40 bg-blue-500/10 text-blue-300" :
+                        t.status === "served" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" :
+                        "border-red-500/40 bg-red-500/10 text-red-300"
+                      }`}>
+                        {t.status?.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleStatus(t._id, "called")}
+                      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-all active:scale-95"
+                    >
+                      Call
+                    </button>
+                    <button
+                      onClick={() => handleStatus(t._id, "served")}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-all active:scale-95"
+                    >
+                      Serve
+                    </button>
+                    <button
+                      onClick={() => handleStatus(t._id, "cancelled")}
+                      className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-all active:scale-95"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
-      </section>
+      );
+    }
 
-      {!selectedShop ? (
-        <p className="text-xs text-slate-400">
-          Select a shop above to see queue and manage products.
-        </p>
-      ) : (
-        <div className="grid md:grid-cols-2 gap-5">
-          {/* Queue management */}
-          <section className="glass-card p-4 space-y-3 text-sm">
-            <h2 className="text-slate-200 text-sm font-medium">
-              Live queue
+    if (activeTab === "products") {
+      return (
+        <div className="space-y-6">
+          {/* Product Form */}
+          <div className="rounded-xl border border-white/10 bg-gradient-to-br from-slate-900/50 to-slate-950/50 p-6 backdrop-blur-sm">
+            <h2 className="text-xl font-bold text-slate-100 mb-4 flex items-center gap-2">
+              <span className="text-2xl">{editingProduct ? "✏️" : "➕"}</span>
+              {editingProduct ? "Edit Product" : "Add New Product"}
             </h2>
-            {queue.map((t) => (
-              <div
-                key={t._id}
-                className="flex items-center justify-between border-b border-white/5 pb-2 last:border-0 last:pb-0"
-              >
-                <div>
-                  <p className="text-slate-100 text-sm">
-                    Token #{t.tokenNumber}
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    Status: {t.status}
-                  </p>
-                </div>
-                <div className="flex gap-2 text-xs">
-                  <button
-                    onClick={() => handleStatus(t._id, "called")}
-                    className="btn-primary px-3 py-1 text-xs"
-                  >
-                    Call
-                  </button>
-                  <button
-                    onClick={() => handleStatus(t._id, "served")}
-                    className="btn-ghost px-3 py-1 text-xs"
-                  >
-                    Serve
-                  </button>
-                  <button
-                    onClick={() => handleStatus(t._id, "cancelled")}
-                    className="btn-ghost px-3 py-1 text-xs"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ))}
-            {queue.length === 0 && (
-              <p className="text-xs text-slate-400">No tokens yet.</p>
-            )}
-          </section>
 
-          {/* Product management */}
-          <section className="glass-card p-4 space-y-4 text-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-slate-200 text-sm font-medium">
-                Products / services
-              </h2>
-              {editingProduct && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingProduct(null);
-                    resetForm();
-                  }}
-                  className="text-[11px] text-slate-400 hover:text-slate-200"
-                >
-                  Cancel edit
-                </button>
-              )}
-            </div>
-
-            {/* Product form */}
-            <form
-              onSubmit={handleProductSubmit}
-              className="space-y-2 text-xs"
-            >
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-slate-300 text-[11px]">
-                    Name *
-                  </label>
+            <form onSubmit={handleProductSubmit} className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">Product Name *</label>
                   <input
-                    className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    value={form.name}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, name: e.target.value }))
-                    }
+                    type="text"
                     required
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    placeholder="e.g., Fresh Milk"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-slate-300 text-[11px]">
-                    Price
-                  </label>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">Price (₹) *</label>
                   <input
                     type="number"
-                    className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    value={form.price}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, price: e.target.value }))
-                    }
                     min="0"
                     step="0.01"
+                    value={form.price}
+                    onChange={(e) => setForm({ ...form, price: e.target.value })}
+                    className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    placeholder="0.00"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-slate-300 text-[11px]">
-                    Unit
-                  </label>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">Unit *</label>
                   <input
-                    className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    type="text"
                     value={form.unit}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, unit: e.target.value }))
-                    }
-                    placeholder="pcs / service / kg"
+                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                    className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    placeholder="pcs, kg, liter, service, etc."
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-slate-300 text-[11px]">
-                    Stock
-                  </label>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-300">Stock Quantity</label>
                   <input
                     type="number"
-                    className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    value={form.stock}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, stock: e.target.value }))
-                    }
                     min="0"
+                    value={form.stock}
+                    onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                    className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    placeholder="0"
                   />
                 </div>
               </div>
-              {/* Product image */}
-              <div className="space-y-1">
-                <label className="text-slate-300 text-[11px]">
-                  Product image
-                </label>
 
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    setImage(file);
-                    setImagePreview(URL.createObjectURL(file));
-                  }}
-                  className="w-full text-[11px] text-slate-300"
-                />
-
-                {imagePreview && (
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="mt-2 h-20 w-20 rounded-lg object-cover border border-white/10"
-                  />
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-300 text-[11px]">
-                  Description
-                </label>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Description</label>
                 <textarea
-                  className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                  rows={2}
                   value={form.description}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, description: e.target.value }))
-                  }
-                  placeholder="Short details about this product / service"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-slate-300 text-[11px]">
-                  Why purchase this? (highlight)
-                </label>
-                <textarea
-                  className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={2}
-                  value={form.whyPurchase}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, whyPurchase: e.target.value }))
-                  }
-                  placeholder="e.g. Best seller • 30 min service • Great for students"
+                  className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  placeholder="Details about this product or service"
                 />
               </div>
 
-              <div className="flex items-center justify-between pt-1">
-                <label className="flex items-center gap-2 text-[11px] text-slate-300">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Why Purchase? (Highlight)</label>
+                <textarea
+                  value={form.whyPurchase}
+                  onChange={(e) => setForm({ ...form, whyPurchase: e.target.value })}
+                  rows={2}
+                  className="w-full rounded-lg bg-black/30 border border-white/10 px-4 py-2.5 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  placeholder="e.g., Best quality • Fast delivery • Great reviews"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Product Image</label>
+                <div className="flex gap-4">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setImage(file);
+                        setImagePreview(URL.createObjectURL(file));
+                      }
+                    }}
+                    className="flex-1 text-sm text-slate-300 file:mr-4 file:px-4 file:py-2 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                  />
+                  {imagePreview && (
+                    <img
+                      src={imagePreview}
+                      alt="Preview"
+                      className="h-16 w-16 rounded-lg object-cover border border-white/10"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-white/10">
+                <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={form.isAvailable}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        isAvailable: e.target.checked
-                      }))
-                    }
+                    onChange={(e) => setForm({ ...form, isAvailable: e.target.checked })}
+                    className="w-4 h-4 rounded border-white/20 accent-blue-500"
                   />
-                  <span>Available for customers</span>
+                  <span className="text-sm text-slate-300">Available for customers</span>
                 </label>
 
-                <button
-                  type="submit"
-                  className="btn-primary text-[11px] px-4 py-1.5"
-                >
-                  {editingProduct ? "Update product" : "Add product"}
-                </button>
+                <div className="flex gap-2">
+                  {editingProduct && (
+                    <button
+                      type="button"
+                      onClick={resetForm}
+                      className="px-6 py-2.5 rounded-lg border border-slate-600 text-slate-300 hover:border-slate-500 hover:text-slate-100 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all active:scale-95"
+                  >
+                    {editingProduct ? "Update Product" : "Add Product"}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
 
-            {/* Product list */}
-            <div className="border-t border-white/5 pt-3 space-y-2">
-              <p className="text-[11px] text-slate-400">
-                {loadingProducts
-                  ? "Loading products..."
-                  : `Total products: ${products.length}`}
-              </p>
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {products.map((p) => (
+          {/* Products List */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                <span className="text-2xl">📦</span> Your Products
+              </h2>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="px-4 py-2 rounded-lg bg-black/30 border border-white/10 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                />
+                <select
+                  value={filterAvailable}
+                  onChange={(e) => setFilterAvailable(e.target.value)}
+                  className="px-4 py-2 rounded-lg bg-black/30 border border-white/10 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                >
+                  <option value="all">All Products</option>
+                  <option value="available">Available</option>
+                  <option value="unavailable">Unavailable</option>
+                </select>
+              </div>
+            </div>
+
+            {loadingProducts ? (
+              <div className="text-center py-8 text-slate-400">Loading products...</div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-8 text-center backdrop-blur-sm">
+                <p className="text-amber-300">
+                  {products.length === 0 ? "No products yet. Add your first product above!" : "No products match your search."}
+                </p>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredProducts.map((p) => (
                   <div
                     key={p._id}
-                    className="flex items-start justify-between rounded-xl bg-white/5 px-3 py-2"
+                    className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm hover:border-blue-500/50 transition-all"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        {p.imageUrl && (
-                          <img
-                            src={`http://localhost:5000${p.imageUrl}`}
-                            alt={p.name}
-                            className="h-12 w-12 rounded-md object-cover border border-white/10"
-                          />
-                        )}
-
-                        <p className="text-xs font-medium text-slate-100">
-                          {p.name}
-                        </p>
+                    {p.imageUrl && (
+                      <img
+                        src={`http://localhost:5000${p.imageUrl}`}
+                        alt={p.name}
+                        className="w-full h-40 rounded-lg object-cover mb-3 border border-white/10"
+                      />
+                    )}
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-slate-100">{p.name}</h3>
                         {!p.isAvailable && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-300 border border-red-500/40">
+                          <span className="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 whitespace-nowrap">
                             Unavailable
                           </span>
                         )}
                       </div>
+
                       {p.price > 0 && (
-                        <p className="text-[11px] text-primary-200">
-                          ₹{p.price} / {p.unit || "unit"}
+                        <p className="text-lg font-bold text-blue-400">
+                          ₹{p.price} <span className="text-xs text-slate-400">/ {p.unit || "unit"}</span>
                         </p>
                       )}
+
+                      {p.stock && (
+                        <p className={`text-sm font-medium ${
+                          p.stock > 10 ? "text-emerald-400" : 
+                          p.stock > 0 ? "text-amber-400" : 
+                          "text-red-400"
+                        }`}>
+                          📦 Stock: {p.stock} {p.unit}
+                        </p>
+                      )}
+
                       {p.whyPurchase && (
-                        <p className="text-[11px] text-emerald-300">
-                          {p.whyPurchase}
-                        </p>
+                        <p className="text-xs text-emerald-300 italic">💡 {p.whyPurchase}</p>
                       )}
+
                       {p.description && (
-                        <p className="text-[11px] text-slate-400 line-clamp-2">
-                          {p.description}
-                        </p>
+                        <p className="text-xs text-slate-400 line-clamp-2">{p.description}</p>
                       )}
-                    </div>
-                    <div className="flex flex-col gap-1 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={() => startEdit(p)}
-                        className="btn-ghost px-2 py-1"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteProduct(p._id)}
-                        className="btn-ghost px-2 py-1 text-red-300 border-red-500/40"
-                      >
-                        Delete
-                      </button>
+
+                      <div className="flex gap-2 pt-3 border-t border-white/10">
+                        <button
+                          onClick={() => startEdit(p)}
+                          className="flex-1 px-3 py-2 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 text-sm font-medium transition-all border border-blue-500/30"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => deleteProduct(p._id)}
+                          className="flex-1 px-3 py-2 rounded-lg bg-red-600/30 hover:bg-red-600/50 text-red-300 text-sm font-medium transition-all border border-red-500/30"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
-                {products.length === 0 && !loadingProducts && (
-                  <p className="text-[11px] text-slate-400">
-                    No products yet. Add your first product above.
-                  </p>
-                )}
               </div>
-            </div>
-          </section>
+            )}
+          </div>
         </div>
-      )}
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-4 py-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        {/* Header */}
+        <div className="space-y-2">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+            Shopkeeper Dashboard
+          </h1>
+          <p className="text-slate-400">Manage your shops, products, and customer queue</p>
+        </div>
+
+        {/* Shop Selector */}
+        <div className="rounded-xl border border-white/10 bg-gradient-to-br from-slate-900/50 to-slate-950/50 p-6 backdrop-blur-sm">
+          <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider mb-4">Select Your Shop</h2>
+          <div className="space-y-3">
+            <div className="flex gap-3 flex-wrap">
+              {shops.map((shop) => (
+                <button
+                  key={shop._id}
+                  onClick={() => shop.status !== "rejected" && setSelectedShop(shop._id)}
+                  disabled={shop.status === "rejected"}
+                  className={`px-6 py-2.5 rounded-lg font-medium transition-all border flex items-center gap-2 ${
+                    shop.status === "rejected"
+                      ? "border-red-500/40 bg-red-500/10 text-red-400 cursor-not-allowed opacity-60"
+                      : selectedShop === shop._id
+                      ? "border-blue-500 bg-blue-600/30 text-blue-100 shadow-lg shadow-blue-500/20"
+                      : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10"
+                  }`}
+                >
+                  <span>{shop.name}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    shop.status === "approved" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" :
+                    shop.status === "pending" ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" :
+                    "bg-red-500/20 text-red-300 border border-red-500/40"
+                  }`}>
+                    {shop.status === "pending" ? "⏳ Pending" : shop.status === "approved" ? "✅ Approved" : "❌ Rejected"}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {shops.length === 0 && (
+              <p className="text-amber-300">⏳ No shops yet. Create one from your profile.</p>
+            )}
+          </div>
+        </div>
+
+        {!selectedShop ? (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-8 text-center backdrop-blur-sm">
+            <p className="text-amber-300 font-medium">👆 Select a shop above to get started</p>
+          </div>
+        ) : (() => {
+          const currentShop = shops.find(s => s._id === selectedShop);
+          
+          return (
+            <div className="space-y-6">
+              {/* Shop Status Banner */}
+              {currentShop?.status === "pending" && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/15 p-4 backdrop-blur-sm flex items-start gap-3">
+                  <span className="text-2xl">⏳</span>
+                  <div>
+                    <h3 className="font-semibold text-amber-300">Shop Awaiting Approval</h3>
+                    <p className="text-sm text-amber-200 mt-1">Your shop is under review by the admin. You can add products, but customers will only see your shop once it's approved.</p>
+                  </div>
+                </div>
+              )}
+
+              {currentShop?.status === "rejected" && (
+                <div className="rounded-xl border border-red-500/40 bg-red-500/15 p-4 backdrop-blur-sm flex items-start gap-3">
+                  <span className="text-2xl">❌</span>
+                  <div>
+                    <h3 className="font-semibold text-red-300">Shop Rejected</h3>
+                    <p className="text-sm text-red-200 mt-1">Unfortunately, your shop application was rejected. Contact admin for details.</p>
+                  </div>
+                </div>
+              )}
+
+              {currentShop?.status === "approved" && (
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 p-4 backdrop-blur-sm flex items-start gap-3">
+                  <span className="text-2xl">✅</span>
+                  <div>
+                    <h3 className="font-semibold text-emerald-300">Shop Active & Approved</h3>
+                    <p className="text-sm text-emerald-200 mt-1">Your shop is approved! Customers can see you and access your products through the queue system.</p>
+                  </div>
+                </div>
+              )}
+
+              {currentShop?.status === "rejected" ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-8 text-center backdrop-blur-sm">
+                  <p className="text-red-300 font-medium">This shop has been rejected and cannot be used.</p>
+                </div>
+              ) : (
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid md:grid-cols-3 gap-4">
+              <StatsCard
+                icon="📦"
+                label="Total Products"
+                value={products.length}
+                color="border-blue-500/30"
+              />
+              <StatsCard
+                icon="📋"
+                label="Queue Length"
+                value={queue.length}
+                color="border-amber-500/30"
+              />
+              <StatsCard
+                icon="✅"
+                label="Available"
+                value={products.filter(p => p.isAvailable).length}
+                color="border-emerald-500/30"
+              />
+            </div>
+
+            {/* Tab Navigation */}
+            <div className="flex gap-2 rounded-xl border border-white/10 bg-white/5 p-2 backdrop-blur-sm">
+              {[
+                { id: "products", label: "📦 Products Management", icon: "Products" },
+                { id: "queue", label: "📋 Queue Management", icon: "Queue" }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 px-6 py-3 rounded-lg font-medium transition-all ${
+                    activeTab === tab.id
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                      : "text-slate-400 hover:text-slate-300"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Content */}
+            {renderTab()}
+          </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
     </main>
   );
 }

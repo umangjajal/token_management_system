@@ -12,6 +12,9 @@ export default function Auth({ mode }) {
   // Role can come from URL (e.g., ?role=shopkeeper) or default to customer
   const defaultRole = params.get("role") || "customer";
 
+  // Separate admin login state
+  const [isAdminMode, setIsAdminMode] = useState(false);
+
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -41,12 +44,19 @@ export default function Auth({ mode }) {
 
     try {
       if (mode === "login") {
-        await login(form.email, form.password);
+        // For admin login, force role to admin
+        const loginData = {
+          email: form.email,
+          password: form.password,
+          role: isAdminMode ? "admin" : form.role
+        };
+        await login(loginData.email, loginData.password);
         navigate("/");
       } else {
+        // Signup flow - cannot be in admin mode
         await register(form);
         // Redirecting to login for email verification flow
-        navigate("/login?verified=false"); 
+        navigate("/login?verified=false");
       }
     } catch (err) {
       console.error("Auth error:", err);
@@ -76,28 +86,37 @@ export default function Auth({ mode }) {
         role: form.role // Sends the role selected in the UI
       });
 
-      // 3. Conditional Onboarding Logic
-      // res.user contains the user record from the backend
-      if (!res.user.phone) {
-        // Redirect to profile to add missing info
-        navigate("/profile?onboarding=true"); 
+      // 3. ✨ Profile is AUTO-CREATED with Google login
+      // res.user contains complete profile from backend
+      const { user, profileStatus } = res;
+
+      console.log(`✅ Google Login Success - Profile Status: ${profileStatus}`);
+
+      // Navigate based on role - Profile is already complete!
+      if (user.role === "shopkeeper") {
+        // Shopkeeper can go directly to shop settings/dashboard
+        navigate("/dashboard/shopkeeper");
+      } else if (user.role === "admin") {
+        // Admin goes directly to admin dashboard
+        navigate("/dashboard/admin");
       } else {
-        // Navigate based on role if profile is already complete
-        if (res.user.role === "shopkeeper") {
-          navigate("/onboard/shop");
-        } else if (res.user.role === "admin") {
-          navigate("/dashboard/admin");
-        } else {
-          navigate("/");
-        }
+        // Customer goes directly to customer dashboard
+        navigate("/dashboard/customer");
       }
     } catch (err) {
       console.error("Google login error:", err);
-      
-      if (err.message && err.message.includes("Network Error") || !err.response) {
-        setError("Cannot connect to server. Check your internet or backend CORS configuration.");
+
+      if (
+        (err.message && err.message.includes("Network Error")) ||
+        !err.response
+      ) {
+        setError(
+          "Cannot connect to server. Check your internet or backend CORS configuration."
+        );
       } else {
-        setError(err.response?.data?.message || "Google login failed. Please try again.");
+        setError(
+          err.response?.data?.message || "Google login failed. Please try again."
+        );
       }
     } finally {
       setLoading(false);
@@ -116,26 +135,57 @@ export default function Auth({ mode }) {
           </p>
         </div>
 
-        {/* ROLE SELECTOR */}
-        <div className="flex p-1 bg-white/5 rounded-xl border border-white/5">
-          {["customer", "shopkeeper", "admin"].map((r) => (
+        {/* LOGIN MODE SELECTOR - Show Customer/Shopkeeper vs Admin */}
+        {mode === "login" && (
+          <div className="flex p-1 bg-white/5 rounded-xl border border-white/5">
             <button
-              key={r}
               type="button"
-              onClick={() => handleRoleChange(r)}
+              onClick={() => setIsAdminMode(false)}
               className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-                form.role === r 
-                ? "bg-blue-600 text-white shadow-lg" 
-                : "text-slate-400 hover:text-slate-200"
+                !isAdminMode
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              {r.charAt(0).toUpperCase() + r.slice(1)}
+              User Login
             </button>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={() => setIsAdminMode(true)}
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                isAdminMode
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Admin Login
+            </button>
+          </div>
+        )}
+
+        {/* ROLE SELECTOR - Only for User Login in Signup mode */}
+        {!isAdminMode && (
+          <div className="flex p-1 bg-white/5 rounded-xl border border-white/5">
+            {["customer", "shopkeeper"].map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => handleRoleChange(r)}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
+                  form.role === r
+                    ? "bg-blue-600 text-white shadow-lg"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {r.charAt(0).toUpperCase() + r.slice(1)}
+              </button>
+            ))}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "register" && (
+          {/* SIGNUP: Name field */}
+          {mode === "register" && !isAdminMode && (
             <div className="space-y-1">
               <input
                 name="name"
@@ -149,6 +199,7 @@ export default function Auth({ mode }) {
             </div>
           )}
 
+          {/* EMAIL */}
           <div className="space-y-1">
             <input
               name="email"
@@ -161,7 +212,8 @@ export default function Auth({ mode }) {
             />
           </div>
 
-          {mode === "register" && (
+          {/* SIGNUP: Phone field */}
+          {mode === "register" && !isAdminMode && (
             <div className="space-y-1">
               <input
                 name="phone"
@@ -174,11 +226,12 @@ export default function Auth({ mode }) {
             </div>
           )}
 
+          {/* PASSWORD */}
           <div className="space-y-1">
             <input
               name="password"
               type="password"
-              placeholder="Password"
+              placeholder={isAdminMode ? "Admin Password" : "Password"}
               value={form.password}
               onChange={handleChange}
               className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition"
@@ -186,12 +239,23 @@ export default function Auth({ mode }) {
             />
           </div>
 
+          {/* ADMIN ONLY MESSAGE */}
+          {mode === "login" && isAdminMode && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+              <p className="text-amber-300 text-xs text-center">
+                Admin accounts are managed separately. Use your admin credentials.
+              </p>
+            </div>
+          )}
+
+          {/* ERROR MESSAGE */}
           {error && (
             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
               <p className="text-red-400 text-xs text-center">{error}</p>
             </div>
           )}
 
+          {/* SUBMIT BUTTON */}
           <button 
             type="submit"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98] disabled:opacity-50" 
@@ -201,36 +265,45 @@ export default function Auth({ mode }) {
           </button>
         </form>
 
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-white/10"></div>
+        {/* DIVIDER - Only show for user login */}
+        {!isAdminMode && (
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/10"></div>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-slate-900 px-2 text-slate-500">Or continue with</span>
+            </div>
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-slate-900 px-2 text-slate-500">Or continue with</span>
-          </div>
-        </div>
+        )}
 
-        <button
-          onClick={handleGoogleLogin}
-          className="w-full flex items-center justify-center gap-3 border border-white/10 py-3 rounded-xl text-slate-200 hover:bg-white/5 transition-all active:scale-[0.98] disabled:opacity-50"
-          disabled={loading}
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
-            <path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C9.03,19.27 6.48,16.68 6.48,13.5C6.48,10.31 9.03,7.74 12.19,7.74C13.9,7.74 15.6,8.36 16.67,9.35L18.73,7.35C17.21,5.97 14.8,5.01 12.19,5.01C7.5,5.01 3.75,8.81 3.75,13.5C3.75,18.19 7.5,21.99 12.19,21.99C16.88,21.99 21.62,18.75 21.62,13.5C21.62,12.63 21.48,11.85 21.35,11.1Z" />
-          </svg>
-          Google
-        </button>
-
-        <p className="text-center text-xs text-slate-500">
-          {mode === "login" ? "Don't have an account? " : "Already have an account? "}
-          <button 
-            type="button"
-            onClick={() => navigate(mode === "login" ? "/register" : "/login")}
-            className="text-blue-400 hover:underline"
+        {/* GOOGLE LOGIN - Only for non-admin users */}
+        {!isAdminMode && (
+          <button
+            onClick={handleGoogleLogin}
+            className="w-full flex items-center justify-center gap-3 border border-white/10 py-3 rounded-xl text-slate-200 hover:bg-white/5 transition-all active:scale-[0.98] disabled:opacity-50"
+            disabled={loading}
           >
-            {mode === "login" ? "Sign Up" : "Log In"}
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C9.03,19.27 6.48,16.68 6.48,13.5C6.48,10.31 9.03,7.74 12.19,7.74C13.9,7.74 15.6,8.36 16.67,9.35L18.73,7.35C17.21,5.97 14.8,5.01 12.19,5.01C7.5,5.01 3.75,8.81 3.75,13.5C3.75,18.19 7.5,21.99 12.19,21.99C16.88,21.99 21.62,18.75 21.62,13.5C21.62,12.63 21.48,11.85 21.35,11.1Z" />
+            </svg>
+            Google
           </button>
-        </p>
+        )}
+
+        {/* BOTTOM LINK - Only show for non-admin users */}
+        {!isAdminMode && (
+          <p className="text-center text-xs text-slate-500">
+            {mode === "login" ? "Don't have an account? " : "Already have an account? "}
+            <button 
+              type="button"
+              onClick={() => navigate(mode === "login" ? "/register" : "/login")}
+              className="text-blue-400 hover:underline"
+            >
+              {mode === "login" ? "Sign Up" : "Log In"}
+            </button>
+          </p>
+        )}
       </div>
     </main>
   );

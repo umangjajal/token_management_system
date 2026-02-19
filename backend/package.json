@@ -4,7 +4,9 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "seed:admin": "node src/seed/seedAdmin.js",
+    "seed:shops": "node src/seed/seedShops.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
